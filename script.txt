@@ -1,0 +1,67 @@
+# Define the log file path
+$logFile = "C:\Path\To\Your\Log\file.log"
+
+# Function to write log messages
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "$timestamp [$Level] $Message"
+    Add-Content -Path $logFile -Value $logEntry
+}
+
+# Write a log message to indicate the script has started
+Write-Log "Script started"
+
+# Define the folder and filter for file monitoring
+$folder = "C:\Arcus2"
+$filter = "cheq.out"
+
+# Create a FileSystemWatcher object
+$fsw = New-Object IO.FileSystemWatcher $folder, $filter -Property @{
+    IncludeSubdirectories = $false
+    NotifyFilter = [IO.NotifyFilters]'FileName, LastWrite'
+}
+
+# Register an event for file changes
+$onChange = Register-ObjectEvent $fsw Changed -SourceIdentifier FileChanged -Action {
+    # Write a log message to indicate a file change event
+    Write-Log "File changed event detected"
+
+    # Get the path of the modified file
+    $file = $eventArgs.FullPath
+
+    try {
+        # Read the content of the file
+        $content = Get-Content $file
+
+        # Extract relevant information from the content
+        $transactionId = ($content | Select-String -Pattern "TID:\s+(\d+)").Matches.Groups[1].Value
+        $receiptNo = ($content | Select-String -Pattern "Receipt:\s+(\d+)").Matches.Groups[1].Value
+        $paymentStatus = ($content | Select-String -Pattern "(PAYMENT DECLINED|PAYMENT SUCCESSFUL)").Matches.Groups[1].Value
+        $totalAmount = ($content | Select-String -Pattern "TOTAL AMOUNT:\s+(.*)\s+KES").Matches.Groups[1].Value
+        $dateTimeOfTransaction = ($content | Select-String -Pattern "Date:\s+(\d{2}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})").Matches.Groups[1].Value
+        
+        # Write a log message with extracted information
+        Write-Log "Transaction ID: $transactionId, Receipt No: $receiptNo, Payment Status: $paymentStatus, Total Amount: $totalAmount, Date/Time: $dateTimeOfTransaction"
+        
+        # Display pop-up notification
+        $message = "Transaction ID: $transactionId`r`nReceipt No: $receiptNo`r`nPayment Status: $paymentStatus`r`nTotal Amount: $totalAmount`r`nDate/Time: $dateTimeOfTransaction"
+        [void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+        [System.Windows.Forms.MessageBox]::Show($message, $paymentStatus, "OK", [System.Windows.Forms.MessageBoxIcon]::Information)
+    } catch {
+        # If an error occurs, catch it and log the error message
+        Write-Log "Error processing file: $_" -Level "ERROR"
+    }
+}
+
+# Write a log message to indicate the end of the script
+Write-Log "Script finished"
+
+while ($true) { 
+    # Keeps the script running
+    Start-Sleep -Seconds 1 
+}

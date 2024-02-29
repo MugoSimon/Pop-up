@@ -1,0 +1,81 @@
+# Define configuration parameters
+$fileToMonitor = "C:\Path\To\Your\File.txt"
+$cheqLogsFile = "C:\Path\To\Your\cheqLogs.txt"
+$sleepIntervalSeconds = 0.5
+
+# Load Windows Forms assembly
+Add-Type -AssemblyName System.Windows.Forms
+
+# Function to write log messages
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+
+    try {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $logEntry = "$timestamp [$Level] $Message"
+        Add-Content -Path $cheqLogsFile -Value $logEntry
+    } catch {
+        Write-Host "Error writing to log file: $_"
+    }
+}
+
+# Function to show pop-up notification
+function Show-PopupNotification {
+    param (
+        [string]$Message,
+        [string]$Title,
+        [System.Windows.Forms.MessageBoxIcon]$Icon
+    )
+
+    try {
+        [System.Windows.Forms.MessageBox]::Show($Message, $Title, "OK", $Icon)
+    } catch {
+        Write-Host "Error displaying pop-up notification: $_"
+    }
+}
+
+# Write a log message to indicate the script has started
+Write-Log "Script started"
+
+# Get the initial last write time of the file
+$initialLastWriteTime = (Get-Item $fileToMonitor).LastWriteTime
+
+# Create a loop to continuously monitor the file
+while ($true) {
+    # Get the current last write time of the file
+    $currentLastWriteTime = (Get-Item $fileToMonitor).LastWriteTime
+
+    # Check if the last write time has changed down to milliseconds
+    if ($currentLastWriteTime -ne $initialLastWriteTime) {
+        try {
+            # Read the content of the file
+            $content = Get-Content $fileToMonitor
+
+            # Extract paymentStatus from content
+            $paymentStatus = ($content | Select-String -Pattern "PaymentStatus:\s+(.+)").Matches.Groups[1].Value
+
+            # Prepare notification message with paymentStatus as title
+            $notificationTitle = $paymentStatus
+
+            # Prepare notification message with paymentStatus as header
+            $notificationMessage = "Payment Status: $($paymentStatus)`n`n$content"
+
+            # Show pop-up notification with paymentStatus as title and content of the file
+            Show-PopupNotification -Message $notificationMessage -Title $notificationTitle -Icon "Information"
+
+            # Log the event of the payment status change
+            Write-Log "Payment Status changed to: $paymentStatus"
+        } catch {
+            Write-Log "Error processing file content: $_"
+        }
+
+        # Update the initial last write time for the next comparison
+        $initialLastWriteTime = $currentLastWriteTime
+    }
+
+    # Sleep for a short interval before checking again
+    Start-Sleep -Seconds $sleepIntervalSeconds
+}

@@ -1,0 +1,74 @@
+# Define the log file path
+$logFile = "C:\Path\To\Your\Log\file.log"
+
+# Load Windows Forms assembly
+[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+
+# Function to write log messages
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "$timestamp [$Level] $Message"
+    Add-Content -Path $logFile -Value $logEntry
+}
+
+# Write a log message to indicate the script has started
+Write-Log "Script started"
+
+# Write a log message to indicate the cheq.out file monitoring is initiated
+Write-Log "Monitoring for cheq.out file started in $folder"
+
+# Define the folder and filter for file monitoring
+$folder = "C:\Arcus2"
+$filter = "cheq.out"
+
+# Create a FileSystemWatcher object
+$fsw = New-Object IO.FileSystemWatcher $folder, $filter -Property @{
+    IncludeSubdirectories = $false
+    NotifyFilter = [IO.NotifyFilters]'FileName, LastWrite'
+}
+
+# Register an event for file changes
+$onChange = Register-ObjectEvent $fsw Changed -SourceIdentifier FileChanged -Action {
+    # Write a log message to indicate a file change event
+    Write-Log "File change event detected"
+
+    # Get the path of the modified file
+    $file = $eventArgs.FullPath
+    
+    # Write a log message to indicate cheq.out file found
+    Write-Log "cheq.out file found: $file"
+
+    try {
+        # Write a log message to indicate file read is initiated
+        Write-Log "Reading content of $file"
+
+        # Read the content of the file
+        $content = Get-Content $file
+        
+        # Write a log message to indicate data capture is initiated
+        Write-Log "Capturing data from $file"
+
+        # Extract relevant information from the content
+        $transactionId = ($content | Select-String -Pattern "TID:\s+(\d+)").Matches.Groups[1].Value
+        $receiptNo = ($content | Select-String -Pattern "Receipt:\s+(\d+)").Matches.Groups[1].Value
+        $paymentStatus = ($content …
+        
+        # Show a pop-up message with extracted information
+        if ($host.UI.RawUI.WindowTitle -ne "") {
+            [System.Windows.Forms.MessageBox]::Show("Transaction ID: $transactionId`nReceipt No: $receiptNo`nPayment Status: $paymentStatus", "File Change Detected", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+        }
+    }
+    catch {
+        Write-Log "Error occurred: $_"
+    }
+}
+
+# Enter an infinite loop to keep the script running
+while ($true) {
+    Start-Sleep -Seconds 1
+}
